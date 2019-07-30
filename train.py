@@ -20,37 +20,41 @@ def testTester(model,start,end,num):
 
 
 def main():
+
+    # Generate training examples and initialize models
     train_x,train_y = dc.makeAdd(0,100,1000)
 
-
-    model = torch.nn.Sequential(
-    # torch.nn.Linear(2, 1),
-
-
-    # torch.nn.Linear(2, 1),
-    # torch.nn.Linear(1, 1)
+    modelA = torch.nn.Sequential(torch.nn.Linear(2,1))
+    modelC = torch.nn.Sequential(torch.nn.Linear(2, 10), torch.nn.Linear(10, 1))
 
 
-    torch.nn.Linear(2, 10),
-    # torch.nn.ReLU(),
-    torch.nn.Linear(10, 1),
-    )
+
+    # Set the learning rate for backprop and decide which loss function to use
     loss_fn = torch.nn.MSELoss(reduction='sum')
     # learning_rate = 1e-4
     learning_rate = 1e-5
-    for t in range(10):
-        print(t)
+
+
+    # Backprop
+    for t in range(1):
         for ex in range(len(train_x)):
 
-            y_pred = model(train_x[ex])
-            loss = loss_fn(y_pred, train_y[ex])
-            # print(t, loss.item())
-            model.zero_grad()
-            loss.backward()
+            y_predA = modelA(train_x[ex])
+            y_predC = modelC(train_x[ex])
+            lossA = loss_fn(y_predA, train_y[ex])
+            lossC = loss_fn(y_predC, train_y[ex])
+            modelA.zero_grad()
+            modelC.zero_grad()
+            lossA.backward()
+            lossC.backward()
+
             with torch.no_grad():
-                for param in model.parameters():
+                for param in modelA.parameters():
                     param -= learning_rate * param.grad
-    return model,train_x,train_y
+                for param in modelC.parameters():
+                    param -= learning_rate * param.grad
+
+    return modelA, modelC, train_x, train_y
 
 
 
@@ -58,22 +62,51 @@ def main():
 
 
 if __name__ == "__main__":
-    model,testx,testy = main()
-
-    sumerror = trainTester(model,testx,testy)
+    modelA, modelC, _, _ = main()
 
 
-    def add(x,y):
-        return model(torch.tensor([float(x),float(y)]))
 
-    h = {}
-    for name, param in model.named_parameters():
+    # Score the trained algorithms on a new test set and print the results
+    testx, testy = dc.makeAdd(0, 100, 1000)
+
+    print("A average error: " + str(trainTester(modelA,testx,testy)))
+    print("C average error: " + str(trainTester(modelC,testx,testy)))
+
+
+    # Make addition testing easier - MANUAL ONLY!
+    # If running loops, use madd below to avoid the time cost of type conversion every operation
+    def addA(x,y):
+        return modelA(torch.tensor([float(x),float(y)]))
+    def addC(x,y):
+        return modelC(torch.tensor([float(x),float(y)]))
+
+    # Make comparing runtimes easier
+    m = torch.tensor([float(1), float(1)])
+
+    def maddA(mat):
+        return modelA(mat)
+    def maddC(mat):
+        return modelC(mat)
+
+
+
+
+    # Extract learned parameters from models A and C
+    paramsA = {}
+    for name, param in modelA.named_parameters():
         if param.requires_grad:
-            h[name[2]+name[0]] = param.data.numpy()
+            paramsA[name[2]+name[0]] = param.data.numpy()
+    paramsC = {}
+    for name, param in modelC.named_parameters():
+        if param.requires_grad:
+            paramsC[name[2]+name[0]] = param.data.numpy()
 
-    first = np.dot(h['w1'],h['b0'])
-    sec = np.dot(h['w1'],h['w0'])[0]
-    third = h['b1']
+
+
+    # Precalculation of matrix multiplication for model C
+    first = np.dot(paramsC['w1'],paramsC['b0'])
+    sec = np.dot(paramsC['w1'],paramsC['w0'])[0]
+    third = paramsC['b1']
 
     combined = first+third #Constant term
     mult1 = sec[0] #multiplier on first input
@@ -82,16 +115,3 @@ if __name__ == "__main__":
 
     def fadd(x,y):
         return combined+mult1*x+mult2*y
-
-
-
-    # print(list(model.named_parameters())[1][0])
-    # layer0bias = list(model.named_parameters())[1][1].detach().numpy()
-    #
-    # print(list(model.named_parameters())[2][0])
-    # layer1weight = list(model.named_parameters())[2][1].detach().numpy()
-    #
-    # layer2weight = list(model.named_parameters())[3][1].detach().numpy()
-    #
-    # print("add(0,0) should be ")
-    # print(np.sum(np.multiply(layer0bias, layer1weight))+layer2weight)
